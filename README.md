@@ -8,6 +8,22 @@
   </p>
 </div>
 
+# Nintendo Switch port
+
+This is a from-scratch port.
+This port uses NXVK and thus doesn't perform well.
+A deko3D backend is in the works that should provide a 2x+ performance gain
+
+Special thanks to HayatoG. His port really helped with some implementation.
+
+Hopefully in the future I can get this to a more native state that doesn't rely overly on compatibility stubs that can be PR'd
+
+Features:
+ - Consistent 30fps in handheld/docked.
+ - Seperate handheld/docked resolution, 720p handheld, 1080p docked
+ - Mod support (in future)
+ - Support for SaltyNX/ReverseNX-RT.
+
 # Overview
 
 Dusklight is a reverse-engineered reimplementation of Twilight Princess.

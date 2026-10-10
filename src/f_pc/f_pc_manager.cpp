@@ -23,6 +23,7 @@
 
 #if TARGET_PC
 #include "dusk/game_clock.h"
+#include "dusk/profiler.hpp"
 
 #include "m_Do/m_Do_graphic.h"
 
@@ -73,13 +74,16 @@ void fpcM_Management(fpcM_ManagementFunc i_preExecuteFn, fpcM_ManagementFunc i_p
             if (dusk::game_clock::g_frameTiming.separatePresentation) {
                 if (JUTFader* fader = mDoGph_gInf_c::getFader()) {
                     fader->advance();
+
                 }
             }
 #endif
 
             // The main loop manages painting when simulation and presentation are separated.
             IF_DUSK_BLOCK(!dusk::game_clock::g_frameTiming.separatePresentation)
+            { DUSK_PROFSCOPE("Painter");
             cAPIGph_Painter();
+            }
             IF_DUSK_BLOCK_END
 
             if (!dPa_control_c::isStatus(1)) {
@@ -101,11 +105,15 @@ void fpcM_Management(fpcM_ManagementFunc i_preExecuteFn, fpcM_ManagementFunc i_p
             }
 
             if (!fapGm_HIO_c::isCaptureScreen()) {
+                { DUSK_PROFSCOPE("Actors");
                 fpcEx_Handler((fpcLnIt_QueueFunc)fpcM_Execute);
+                }
             }
 
             if (!fapGm_HIO_c::isCaptureScreen() || fapGm_HIO_c::getCaptureScreenDivH() != 1) {
+                { DUSK_PROFSCOPE("DrawRec");
                 fpcDw_Handler((fpcDw_HandlerFuncFunc)fpcM_DrawIterater, (fpcDw_HandlerFunc)fpcM_Draw);
+                }
             }
 
             IF_DUSK(dComIfGp_drawSimpleModel());

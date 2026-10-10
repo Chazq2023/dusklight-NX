@@ -9,6 +9,7 @@
 #include "dusk/hotkeys.h"
 #include "dusk/main.h"
 #include "dusk/os.h"
+#include "dusk/profiler.hpp"
 #include "dusk/settings.h"
 #include "dusk/speedrun.h"
 
@@ -115,7 +116,9 @@ namespace dusk {
             }
 
             ImGui::MenuItem("Process Management", hotkeys::SHOW_PROCESS_MANAGEMENT, &m_showProcessManagement);
+#if DUSK_PROFILER_ENABLED
             ImGui::MenuItem("Debug Overlay", hotkeys::SHOW_DEBUG_OVERLAY, &m_showDebugOverlay);
+#endif
             ImGui::MenuItem("Heap Viewer", hotkeys::SHOW_HEAP_VIEWER, &m_showHeapOverlay);
             ImGui::MenuItem("Player Info", hotkeys::SHOW_PLAYER_INFO, &m_showPlayerInfo);
             ImGui::MenuItem("Debug Camera", hotkeys::SHOW_DEBUG_CAMERA, &m_showCameraOverlay);
@@ -137,9 +140,13 @@ namespace dusk {
     }
 
     void ImGuiMenuTools::ShowDebugOverlay() {
-        if (!getSettings().backend.enableAdvancedSettings ||
-            !ImGuiConsole::CheckMenuViewToggle(ImGuiKey_F3, m_showDebugOverlay))
-        {
+#if !DUSK_PROFILER_ENABLED
+        return;
+#endif
+        if (getSettings().backend.showProfilerOverlay) {
+            m_showDebugOverlay = true;
+        } else if (!getSettings().backend.enableAdvancedSettings ||
+                   !ImGuiConsole::CheckMenuViewToggle(ImGuiKey_F3, m_showDebugOverlay)) {
             return;
         }
 
@@ -178,21 +185,44 @@ namespace dusk {
                 fmt::format(FMT_STRING("Draw call count:   {}\n"), stats.drawCallCount));
             ImGuiStringViewText(fmt::format(FMT_STRING("Merged draw calls: {}\n"),
                 stats.mergedDrawCallCount));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Vertex size:       {}\n"),
-                BytesToString(stats.lastVertSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Uniform size:      {}\n"),
-                BytesToString(stats.lastUniformSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Index size:        {}\n"),
-                BytesToString(stats.lastIndexSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Storage size:      {}\n"),
-                BytesToString(stats.lastStorageSize)));
-            ImGuiStringViewText(fmt::format(FMT_STRING("Tex upload size:   {}\n"),
-                BytesToString(stats.lastTextureUploadSize)));
-            ImGuiStringViewText(fmt::format(
-                FMT_STRING("Total:             {}\n"),
-                BytesToString(stats.lastVertSize + stats.lastUniformSize +
-                    stats.lastIndexSize + stats.lastStorageSize +
-                    stats.lastTextureUploadSize)));
+            ImGuiStringViewText(fmt::format(FMT_STRING("BindGroup rebuilds: {}\n"),
+                stats.bindGroupRebuilds));
+            ImGuiStringViewText(fmt::format(FMT_STRING("Pipeline rebuilds:  {}\n"),
+                stats.pipelineRebuilds));
+            ImGuiStringViewText(fmt::format(FMT_STRING("Uniform rebuilds:   {}\n"),
+                stats.uniformRebuilds));
+            ImGuiStringViewText(fmt::format(FMT_STRING("Merge blk fmt/pipe/tex/uni: {}/{}/{}/{}\n"),
+                stats.mergeBlockedFmt, stats.mergeBlockedPipeline,
+                stats.mergeBlockedTextures, stats.mergeBlockedUniformOnly));
+            
+            ImGui::Separator();
+
+            ImGuiStringViewText(fmt::format(FMT_STRING("CPU frame: avg {:.2f}ms p95 {:.2f}ms\n"),
+                                            dusk::profiler::frameAvgMs(),
+                                            dusk::profiler::frameP95Ms()));
+            if (ImGui::BeginTable("dusk_profiler", 4,
+                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
+                ImGui::TableSetupColumn("scope");
+                ImGui::TableSetupColumn("avg ms");
+                ImGui::TableSetupColumn("peak ms");
+                ImGui::TableSetupColumn("calls");
+                ImGui::TableHeadersRow();
+                for (int pi = 0; pi < dusk::profiler::numZones(); ++pi) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGuiStringViewText(dusk::profiler::zoneName(pi));
+                    ImGui::TableNextColumn();
+                    ImGuiStringViewText(
+                        fmt::format(FMT_STRING("{:.2f}"), dusk::profiler::zoneAvgMs(pi)));
+                    ImGui::TableNextColumn();
+                    ImGuiStringViewText(
+                        fmt::format(FMT_STRING("{:.2f}"), dusk::profiler::zonePeakMs(pi)));
+                    ImGui::TableNextColumn();
+                    ImGuiStringViewText(
+                        fmt::format(FMT_STRING("{:.0f}"), dusk::profiler::zoneAvgCalls(pi)));
+                }
+                ImGui::EndTable();
+            }
 
             // TODO: persist to config
             ShowCornerContextMenu(m_debugOverlayCorner, m_cameraOverlayCorner);

@@ -59,6 +59,7 @@
 #include "dusk/mouse.h"
 #include "dusk/os.h"
 #include "dusk/presentation.hpp"
+#include "dusk/profiler.hpp"
 #include "dusk/settings.h"
 #include "dusk/speedrun.h"
 #include "dusk/texture_replacements.hpp"
@@ -100,6 +101,11 @@
 
 #ifdef __APPLE__
 #include <TargetConditionals.h>
+#endif
+
+#ifdef __SWITCH__
+#include <switch.h>
+#include <sys/stat.h>
 #endif
 
 // --- GLOBALS ---
@@ -148,8 +154,33 @@ s32 LOAD_COPYDATE(void*) {
 
 AuroraInfo auroraInfo;
 
+#ifdef __SWITCH__
+static void ensureSwitchControllerPort() {
+    static bool done = false;
+    if (done) {
+        return;
+    }
+    if (PADGetIndexForPort(PAD_CHAN0) >= 0) {
+        done = true;
+        return;
+    }
+    for (u32 i = 0, n = PADCount(); i < n; ++i) {
+        const char* name = PADGetNameForControllerIndex(i);
+        if (name != nullptr && std::strcmp(name, "Nintendo Switch Controller") == 0) {
+            PADSetPortForIndex(i, PAD_CHAN0);
+            done = true;
+            return;
+        }
+    }
+}
+#endif
+
 bool launchUILoop() {
     while (dusk::IsRunning && !dusk::IsGameLaunched) {
+#ifdef __SWITCH__
+        dusk::pollDockedModeResolution();
+        ensureSwitchControllerPort();
+#endif
         const AuroraEvent* event = aurora_update();
         while (event != nullptr && event->type != AURORA_NONE) {
             switch (event->type) {
@@ -228,7 +259,9 @@ void main01(void) {
     dusk::game_clock::initialize();
 
     do {
+        DUSK_PROF_FRAME_BEGIN();
         // 1. Update Window Events
+        { DUSK_PROFSCOPE("Events");
         const AuroraEvent* event = aurora_update();
         while (true) {
             switch (event->type) {
@@ -269,23 +302,35 @@ void main01(void) {
         }
 
         eventsDone:;
+        } // Events
 
+        { DUSK_PROFSCOPE("Begin");
         if (!aurora_begin_frame()) {
             DuskLog.debug("aurora_begin_frame returned false, skipping draw this frame");
             continue;
         }
+        } // Begin
 
+        { DUSK_PROFSCOPE("VIWait");
         VIWaitForRetrace();
+        } // VIWait
 
+        { DUSK_PROFSCOPE("UI");
         dusk::lastFrameAuroraStats = *aurora_get_stats();
         mDoGph_gInf_c::updateRenderSize();
+#ifdef __SWITCH__
+        dusk::pollDockedModeResolution();
+        ensureSwitchControllerPort();
+#endif
 
         dusk::ui::update();
+        } // UI
 
         const auto timing = dusk::game_clock::advance();
         if (timing.separatePresentation) {
             if (timing.numSimTicks > 0) {
                 dusk::interp::begin_frame(0.0f);
+                { DUSK_PROFSCOPE("Sim");
                 for (int i = 0; i < timing.numSimTicks; ++i) {
                     // When a capture is pending, it has to be painted before the next sim tick.
                     if (dMw_isCapturePending()) {
@@ -299,17 +344,20 @@ void main01(void) {
                     dusk::mouse::read();
                     dusk::gyro::read(dusk::game_clock::kSimPeriod);
                     dusk::processGameCombos();
-                    fapGm_Execute();
+                    { DUSK_PROFSCOPE("Execute"); fapGm_Execute(); }
                     dusk::processCameraCommands();
-                    mDoAud_Execute();
+                    { DUSK_PROFSCOPE("Audio"); mDoAud_Execute(); }
                     dusk::game_clock::commit_sim_tick();
                 }
+                } // Sim
             }
 
             const float step = timing.interpolating ? dusk::game_clock::sample_interpolation_step() : 1.0f;
             dusk::interp::begin_presentation(step);
+            { DUSK_PROFSCOPE("Draw");
             fpcM_DrawIterater((fpcM_DrawIteraterFunc)fpcM_Draw);
             cAPIGph_Painter();
+            } // Draw
             dusk::interp::end_presentation();
         } else {
             dusk::interp::begin_frame(0.0f);
@@ -321,16 +369,21 @@ void main01(void) {
             dusk::gyro::read(timing.dt);
             dusk::processGameCombos();
 
+            { DUSK_PROFSCOPE("Sim");
             // EXECUTE GAME LOGIC & RENDER
             // This calls mDoGph_Painter -> JFWDisplay -> GX Functions
-            fapGm_Execute();
+            { DUSK_PROFSCOPE("Execute"); fapGm_Execute(); }
             dusk::processCameraCommands();
 
-            mDoAud_Execute();
+            { DUSK_PROFSCOPE("Audio"); mDoAud_Execute(); }
             dusk::game_clock::commit_sim_tick();
+            } // Sim
         }
 
+        { DUSK_PROFSCOPE("Present");
         aurora_end_frame();
+        } // Present
+        DUSK_PROF_FRAME_END();
 
         FrameMark;
 
@@ -486,7 +539,9 @@ static void LanguageInit() {
 }
 
 static void log_build_info() {
+#ifndef __SWITCH__
     DuskLog.info("Build: {} (rev {}, built {}, type {})", BOREALIS_APP_DESCRIBE, BOREALIS_APP_REVISION, BOREALIS_APP_DATE, BOREALIS_BUILD_TYPE);
+#endif
     DuskLog.info("Platform: {}", BOREALIS_PLATFORM_NAME);
 }
 
@@ -540,6 +595,29 @@ static void mods_init(const std::filesystem::path& mods_dir) {
     dusk::mods::ModLoader::instance().init();
 }
 
+#if defined(__SWITCH__)
+namespace dusk::sw {
+void nvk_dispatch_fixup();
+void nxvk_env_setup();
+}  // namespace dusk::sw
+
+extern "C" {
+u32 __nx_applet_type = AppletType_Application;
+size_t __nx_heap_size = 0;
+
+void userAppInit(void) {
+    romfsInit();
+    dusk::sw::nxvk_env_setup();
+    nvInitialize();
+}
+
+void userAppExit(void) {
+    nvExit();
+    romfsExit();
+}
+}  // extern "C"
+#endif
+
 // =========================================================================
 // PC ENTRY POINT
 // =========================================================================
@@ -550,6 +628,37 @@ int game_main(int argc, char* argv[]) {
         return 0;
     }
     mainCalled = true;
+
+#if defined(__SWITCH__)
+    if (appletGetAppletType() != AppletType_Application) {
+        consoleInit(NULL);
+        printf("Dusklight needs Title Takeover to run properly.\n\n");
+        printf("Hold R on a title to enter title override and run Dusklight or launch a forwarder if you have one,\n");
+        printf("Press PLUS to exit.\n");
+        consoleUpdate(NULL);
+        padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+        PadState pad;
+        padInitializeDefault(&pad);
+        while (appletMainLoop()) {
+            padUpdate(&pad);
+            if (padGetButtonsDown(&pad) & HidNpadButton_Plus) {
+            break;
+            }
+            consoleUpdate(NULL);
+        }
+        consoleExit(NULL);
+        return 0;
+    }
+
+    // Pin thread for optimal performance
+    svcSetThreadCoreMask(threadGetCurHandle(), 0, 0x1);
+    // Ensure directories exist
+    mkdir("sdmc:/switch", 0777);
+    mkdir("sdmc:/switch/dusklight", 0777);
+    mkdir("sdmc:/switch/dusklight/cache", 0777);
+    // NVK stuff
+    dusk::sw::nvk_dispatch_fixup();
+#endif
 
     cxxopts::ParseResult parsed_arg_options;
     borealis::cli::StandardOptions standardOptions;
@@ -651,7 +760,9 @@ int game_main(int argc, char* argv[]) {
         sentryOptions.attachments.emplace_back(logPath);
     }
     borealis::sentry::initialize(sentryOptions);
+#ifndef __SWITCH__
     borealis::crash::install();
+#endif
     // TODO: How to handle this?
     // PADSetDefaultMapping(&defaultPadMapping, PAD_TYPE_STANDARD);
 
@@ -708,6 +819,10 @@ int game_main(int argc, char* argv[]) {
         config.pauseOnFocusLost = dusk::getSettings().game.pauseOnFocusLost;
         config.imGuiInitCallback = &aurora_imgui_init_callback;
         config.allowTextureDumps = false;
+        {
+            const int aniso = dusk::getSettings().game.maxTextureAnisotropy.getValue();
+            config.maxTextureAnisotropy = static_cast<uint16_t>(aniso < 1 ? 1 : (aniso > 16 ? 16 : aniso));
+        }
         auroraInfo = aurora_initialize(argc, argv, &config);
     }
 

@@ -6,7 +6,11 @@
 #include "dusk/ui/ui.hpp"
 
 #include <aurora/aurora.h>
+#include <aurora/saltynx.h>
 #include <dolphin/vi.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 namespace dusk {
 
@@ -80,9 +84,15 @@ UserSettings g_userSettings = {
         .disableWaterRefraction {"game.disableWaterRefraction", false},
         .enableTextureReplacements {"game.enableTextureReplacements", true},
         .enableFrameInterpolation {"game.enableFrameInterpolation", FrameInterpMode::Off},
+        .interpolationQuality {"game.interpolationQuality", InterpQuality::Fast},
         .internalResolutionScale {"game.internalResolutionScale", 0},
         .shadowResolutionMultiplier {"game.shadowResolutionMultiplier", 1},
         .resampler {"game.resampler", Resampler::Bilinear},
+#ifdef __SWITCH__
+        .maxTextureAnisotropy {"game.maxTextureAnisotropy", 4},
+#else
+        .maxTextureAnisotropy {"game.maxTextureAnisotropy", 16},
+#endif
         .enableMapBackground {"game.enableMapBackground", true},
         .disableCutscenePillarboxing {"game.disableCutscenePillarboxing", false},
         .disableLetterboxing {"game.disableLetterboxing", LetterboxMode::Off},
@@ -185,6 +195,7 @@ UserSettings g_userSettings = {
         .checkForModUpdates {"backend.checkForModUpdates", true},
         .cardFileType {"backend.cardFileType", static_cast<int>(CARD_GCIFOLDER)},
         .enableAdvancedSettings {"backend.enableAdvancedSettings", false},
+        .showProfilerOverlay {"backend.showProfilerOverlay", false},
     },
 
     // Not sure if there's a better way to declare this
@@ -232,9 +243,53 @@ UserSettings& getSettings() {
     return g_userSettings;
 }
 
+bool switch_is_docked() {
+#ifdef __SWITCH__
+    bool nxrtDocked = false;
+    if (aurora_saltynx_docked_override(&nxrtDocked)) {
+        return nxrtDocked;
+    }
+    return appletGetOperationMode() == AppletOperationMode_Console;
+#else
+    return false;
+#endif
+}
+
 void applyInternalResolutionScale(int scale) {
+#ifdef __SWITCH__
+    if (scale <= 0) {
+        scale = lockedResolutionValueForHeight(switch_is_docked() ? 1080 : 720);
+        if (scale <= 0) {
+            VISetFrameBufferScale(0.0f);
+            return;
+        }
+    }
+#endif
+    const int lockedHeight = lockedResolutionHeightForValue(scale);
+    if (lockedHeight > 0) {
+        VISetFrameBufferHeight(static_cast<uint32_t>(lockedHeight));
+        return;
+    }
     VISetFrameBufferScale(static_cast<float>(scale));
 }
+#ifdef __SWITCH__
+void pollDockedModeResolution() {
+    static int framesSinceCheck = 30;
+    static int lastDocked = -1;
+    if (++framesSinceCheck < 30) {
+        return;
+    }
+    framesSinceCheck = 0;
+    const int docked = switch_is_docked() ? 1 : 0;
+    if (docked == lastDocked) {
+        return;
+    }
+    lastDocked = docked;
+    if (getSettings().game.internalResolutionScale.getValue() == 0) {
+        applyInternalResolutionScale(0);
+    }
+}
+#endif
 
 void applyResampler(Resampler resampler) {
     switch (resampler) {
@@ -322,6 +377,7 @@ void registerSettings() {
     Register(g_userSettings.game.resampler,
         [](const Resampler& value, const Resampler&) { applyResampler(value); });
     Register(g_userSettings.game.shadowResolutionMultiplier);
+    Register(g_userSettings.game.maxTextureAnisotropy);
     Register(g_userSettings.game.enableMapBackground);
     Register(g_userSettings.game.disableCutscenePillarboxing);
     Register(g_userSettings.game.disableLetterboxing);
@@ -367,6 +423,7 @@ void registerSettings() {
     Register(g_userSettings.game.infiniteEponaStamina);
 
     Register(g_userSettings.game.enableFrameInterpolation);
+    Register(g_userSettings.game.interpolationQuality);
     Register(g_userSettings.game.enableGyroAim);
     Register(g_userSettings.game.enableGyroRollgoal);
     Register(g_userSettings.game.gyroSensitivityX);
@@ -405,6 +462,7 @@ void registerSettings() {
     Register(g_userSettings.backend.checkForModUpdates);
     Register(g_userSettings.backend.cardFileType);
     Register(g_userSettings.backend.enableAdvancedSettings);
+    Register(g_userSettings.backend.showProfilerOverlay);
 
     Register(g_userSettings.actionBindings.firstPersonCamera[0]);
     Register(g_userSettings.actionBindings.firstPersonCamera[1]);

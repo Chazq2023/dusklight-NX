@@ -10,6 +10,10 @@ borealis_detect_version()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 project(dusklight LANGUAGES C CXX VERSION ${BOREALIS_APP_VERSION})
 
+if (DUSK_PLATFORM_SWITCH)
+    include(cmake/SwitchOptions.cmake)
+endif ()
+
 if (APPLE)
     enable_language(OBJC OBJCXX)
 endif ()
@@ -70,10 +74,20 @@ endif ()
 if (CMAKE_SYSTEM_NAME STREQUAL Linux)
   set(DAWN_USE_WAYLAND ON CACHE BOOL "Enable support for Wayland surface" FORCE)
 endif ()
-set(AURORA_ENABLE_DVD ON CACHE BOOL "Enable DVD API support" FORCE)
+if (NOT DUSK_PLATFORM_SWITCH)
+  set(AURORA_ENABLE_DVD ON CACHE BOOL "Enable DVD API support" FORCE)
+endif ()
 set(AURORA_ENABLE_CARD ON CACHE BOOL "Enable CARD API support" FORCE)
 set(AURORA_ENABLE_THP ON CACHE BOOL "Enable THP decoder" FORCE)
-set(AURORA_ENABLE_RMLUI ON CACHE BOOL "Enable RmlUi UI support" FORCE)
+if (NOT DUSK_PLATFORM_SWITCH)
+  set(AURORA_ENABLE_RMLUI ON CACHE BOOL "Enable RmlUi UI support" FORCE)
+endif ()
+option(DUSK_ENABLE_PROFILER "Enable the built-in frame profiler (overlay zones)" ON)
+if (DUSK_ENABLE_PROFILER)
+    add_compile_definitions(DUSK_PROFILER_ENABLED=1)
+else ()
+    add_compile_definitions(DUSK_PROFILER_ENABLED=0)
+endif ()
 add_subdirectory(extern/aurora EXCLUDE_FROM_ALL)
 target_compile_definitions(aurora_mtx PRIVATE MTX_USE_PS=1)
 
@@ -261,6 +275,13 @@ endif()
 
 include(files.cmake)
 
+if (DUSK_PLATFORM_SWITCH)
+    set_source_files_properties(${DOLZEL_FILES}
+        PROPERTIES COMPILE_OPTIONS "-Ofast;-fno-finite-math-only;-fno-aggressive-loop-optimizations;-Wno-invalid-pch")
+    set(CMAKE_PCH_WARN_INVALID OFF)
+endif ()
+
+
 # TODO: version handling for res includes
 
 set(DUSK_BUNDLE_NAME Dusklight)
@@ -280,6 +301,11 @@ set(GAME_COMPILE_DEFS DUSK_BUILDING_GAME=1)
 set(GAME_LIBS aurora::core aurora::gx aurora::gd aurora::si aurora::vi aurora::pad aurora::mtx aurora::os aurora::dvd aurora::thp
     aurora::card borealis::http borealis::cli borealis::crash borealis::data borealis::disc borealis::discord borealis::file_select borealis::io borealis::log borealis::net borealis::presentation borealis::sentry borealis::update borealis::ws freeverb cxxopts::cxxopts absl::flat_hash_map nlohmann_json::nlohmann_json TracyClient fmt::fmt
     Threads::Threads zstd::libzstd dusklight_game_headers picosha2 PNG::PNG)
+if (DUSK_PLATFORM_SWITCH)
+    # Native libnx replacements ship as same-named targets in platforms/switch.
+    list(REMOVE_ITEM GAME_LIBS borealis::crash borealis::net borealis::presentation borealis::disc)
+    list(APPEND GAME_COMPILE_DEFS DUSK_ASSET_DIR="romfs:/")
+endif ()
 if (DUSK_HAS_FUNCHOOK)
     list(APPEND GAME_LIBS funchook-static)
 endif ()
@@ -347,7 +373,13 @@ foreach(jsystem_lib IN LISTS JSYSTEM_LIBRARIES)
 endforeach()
 
 set(JSYSTEM_LINK_LIBRARIES ${JSYSTEM_LIBRARIES})
-if (CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED OR CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED)
+if (DUSK_PLATFORM_SWITCH)
+    # GNU ld resolves static archives in a single left-to-right pass. The split
+    # JSystem libraries reference each other, so wrap them in an explicit group.
+    # (Spelled out instead of $<LINK_GROUP:RESCAN>: the bare-metal toolchain
+    # has no LINK_GROUP feature definition for CMake to expand.)
+    set(JSYSTEM_LINK_LIBRARIES "-Wl,--start-group" ${JSYSTEM_LIBRARIES} "-Wl,--end-group")
+elseif (CMAKE_CXX_LINK_GROUP_USING_RESCAN_SUPPORTED OR CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED)
     # GNU ld resolves static archives in a single left-to-right pass. The split
     # JSystem libraries reference each other, so they need a RESCAN group there.
     set(JSYSTEM_LINK_LIBRARIES "$<LINK_GROUP:RESCAN,${JSYSTEM_LIBRARIES}>")
@@ -365,6 +397,10 @@ if (ENABLE_ASAN)
 endif ()
 target_compile_definitions(dusk_internal PRIVATE ${GAME_COMPILE_DEFS})
 target_include_directories(dusk_internal PRIVATE ${miniz_SOURCE_DIR})
+if (DUSK_PLATFORM_SWITCH)
+    target_include_directories(dusk_internal PRIVATE "${CMAKE_SOURCE_DIR}/platforms/switch/include")
+    target_link_libraries(dusk_internal PRIVATE dusk_switch_discimage)
+endif ()
 target_link_libraries(dusk_internal PRIVATE aurora::main ${GAME_LIBS} ${JSYSTEM_LIBRARIES})
 target_precompile_headers(dusk_internal PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_SOURCE_DIR}/include/dusk_pch.hpp>")
 
@@ -720,3 +756,7 @@ foreach (target IN LISTS BINARY_TARGETS)
 endforeach ()
 
 install_bundled_mods()
+
+if (DUSK_PLATFORM_SWITCH)
+    add_subdirectory(platforms/switch)
+endif ()

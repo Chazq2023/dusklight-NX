@@ -10,7 +10,11 @@
 #include "JSystem/JAudio2/JASDSPChannel.h"
 #include "JSystem/JAudio2/JASHeapCtrl.h"
 
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 #include <tracy/Tracy.hpp>
 
 #include <array>
@@ -76,6 +80,10 @@ static bool InitSDL3Output() {
         SDL_Init(SDL_INIT_AUDIO);
     }
 
+#ifdef __SWITCH__
+    // Reduce audio crackle
+    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, "4096");
+#endif
     const SDL_AudioSpec spec = {
         SDL_AUDIO_F32,
         static_cast<int>(desiredChannelCount),
@@ -155,6 +163,9 @@ void SDLCALL GetNewAudio(
     SDL_AudioStream*,
     int needed,
     int) {
+#ifdef __SWITCH__
+    { static bool pinned = false; if (!pinned) { pinned = true; svcSetThreadCoreMask(threadGetCurHandle(), 1, 0x2); } }
+#endif
     FrameMarkStart(FrameName);
     while (needed > 0) {
         const int rendered = RenderNewAudioFrame();

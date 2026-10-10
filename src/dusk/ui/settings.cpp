@@ -70,6 +70,11 @@ constexpr std::array kInterpolationModes = {
     "Unlimited",
 };
 
+constexpr std::array kInterpQualityModes = {
+    "Fast",
+    "Fancy",
+};
+
 constexpr std::array kAudioOutputModeNames = {
     "Stereo (Speakers)",
     "Stereo (Headphones)",
@@ -342,6 +347,8 @@ const Rml::String kDepthOfFieldHelpText =
 const Rml::String kUnlockFramerateHelpText =
     "<br/>Uses inter-frame interpolation to enable higher frame rates.<br/><br/>May introduce minor "
     "visual artifacts or animation glitches.";
+const Rml::String kInterpolationQualityHelpText =
+    "<br/>Fast mode uses a but lower quality pipeline.<br/><br/>Fancy uses a higher quality pipeline which improves visuals, but is more CPU intensive.";
 const Rml::String kTextureReplacementHelpText =
     "Enable installed texture replacements.";
 
@@ -680,7 +687,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
         auto& rightPane = add_child<Pane>(content, Pane::Type::Uncontrolled);
 
         leftPane.add_section("Display");
-
+        #ifndef __SWITCH__
         leftPane.register_control(leftPane.add_button("Toggle Fullscreen").on_pressed([] {
             mDoAud_seStartMenu(kSoundItemChange);
             getSettings().video.enableFullscreen.setValue(!getSettings().video.enableFullscreen);
@@ -696,10 +703,15 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             VICenterWindow();
         }),
             rightPane, [](Pane& pane) { pane.clear(); });
+        #endif
         config_bool_select(leftPane, rightPane, getSettings().video.enableVsync,
             {
                 .key = "Enable VSync",
+                #ifdef __SWITCH__
+                .helpText = "Synchronizes the frame rate to multiples of 60hz.",
+                #else
                 .helpText = "Synchronizes the frame rate to your monitor's refresh rate.",
+                #endif
                 .onChange = [](bool value) { aurora_enable_vsync(value); },
             });
         config_bool_select(leftPane, rightPane, getSettings().video.lockAspectRatio,
@@ -769,6 +781,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 pane.add_rml(
                     "<br/>Display the current framerate in a corner of the screen while playing.");
             });
+        #ifndef __SWITCH__
         config_bool_select(leftPane, rightPane, getSettings().video.rememberWindowSize,
             {
                 .key = "Remember Window Size",
@@ -784,7 +797,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                     },
                 .isDisabled = [] { return IsMobile; },
             });
-
+        #endif
         config_int_select(leftPane, rightPane, getSettings().video.uiScale,
             "UI Scale",
             "Scales the Dusklight interface relative to the display's DPI scale. Has no effect on the game's UI and HUD.",
@@ -810,6 +823,10 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .helpText = kResamplerHelpText,
             });
 
+        config_int_select(leftPane, rightPane, getSettings().game.maxTextureAnisotropy,
+            "Max Anisotropy",
+            "Caps anisotropic texture filtering. Lower values trade sharpness for performance.",
+            1, 16, 1, {}, {}, "x");
         leftPane.add_section("Post-Processing");
         graphics_tuner_control(*this, leftPane, rightPane,
             GraphicsTunerProps{
@@ -873,6 +890,37 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
             "Framerate Cap", "Limit the framerate to the specified value.", 30, 540, 1,
             [] { return getSettings().game.enableFrameInterpolation.getValue() != FrameInterpMode::Capped; },
             [](int) { presentation::update_frame_rate_preference(); });
+        leftPane.register_control(
+            leftPane.add_select_button({
+                .key = "Interpolation Quality",
+                .getValue =
+                    [] {
+                        return kInterpQualityModes[static_cast<u8>(
+                            getSettings().game.interpolationQuality.getValue())];
+                    },
+                .isModified =
+                    [] {
+                        return getSettings().game.interpolationQuality.getValue() !=
+                               getSettings().game.interpolationQuality.getDefaultValue();
+                    },
+            }),
+            rightPane, [](Pane& pane) {
+                for (int i = 0; i < kInterpQualityModes.size(); i++) {
+                    pane.add_button({
+                            .text = kInterpQualityModes[i],
+                            .isSelected =
+                                [i] {
+                                    return getSettings().game.interpolationQuality.getValue() == static_cast<InterpQuality>(i);
+                                },
+                        })
+                        .on_pressed([i] {
+                            mDoAud_seStartMenu(kSoundItemChange);
+                            getSettings().game.interpolationQuality.setValue(static_cast<InterpQuality>(i));
+                            config::save();
+                        });
+                }
+                pane.add_rml(kInterpolationQualityHelpText);
+            });
         config_bool_select(leftPane, rightPane, getSettings().game.enableMapBackground,
             {
                 .key = "Enable Mini-Map Shadows",
@@ -942,12 +990,14 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 pane.clear();
                 pane.add_text("Open input binding configuration.");
             });
+        #ifndef __SWITCH__
         config_bool_select(leftPane, rightPane, getSettings().game.allowBackgroundInput,
             {
                 .key = "Allow Background Inputs",
                 .helpText = "Allow inputs even when the game window is not focused.",
                 .onChange = [](bool value) { aurora_set_background_input(value); },
             });
+        #endif
 
 #if TOUCH_CONTROLS_AVAILABLE
         leftPane.add_section("Touch");
@@ -1098,7 +1148,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
     add_tab("Audio", [this](Rml::Element* content) {
         auto& leftPane = add_child<Pane>(content, Pane::Type::Controlled);
         auto& rightPane = add_child<Pane>(content, Pane::Type::Uncontrolled);
-
+        #ifndef __SWITCH__
         leftPane.add_section("Output");
         leftPane.register_control(
             leftPane.add_select_button({
@@ -1127,7 +1177,7 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                     });
                 }
             });
-
+        #endif
         // TODO: Individual sliders for Sub Music, Sound Effects, and Fanfare.
         leftPane.add_section("Volume");
         leftPane.register_control(
@@ -1613,6 +1663,13 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .onChange = [](bool) { MenuBar::refresh_tabs(); },
                 .isDisabled = [] { return speedrun::isActive(); },
             });
+#if DUSK_PROFILER_ENABLED
+        config_bool_select(leftPane, rightPane, getSettings().backend.showProfilerOverlay,
+            {
+                .key = "Show Profiler Overlay",
+                .helpText = "Display a CPU profiler overlay. Only for developers!"
+            });
+#endif
         config_bool_select(leftPane, rightPane, getSettings().game.showInputViewer,
             {
                 .key = "Show Input Viewer",

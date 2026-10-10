@@ -48,6 +48,11 @@ enum class FrameInterpMode : u8 {
     Unlimited = 2,
 };
 
+enum class InterpQuality : u8 {
+    Fast = 0,
+    Fancy = 1,
+};
+
 enum class LetterboxMode : u8 {
     Off = 0,
     On = 1,
@@ -123,6 +128,12 @@ template <>
 struct ConfigEnumRange<FrameInterpMode> {
     static constexpr auto min = FrameInterpMode::Off;
     static constexpr auto max = FrameInterpMode::Unlimited;
+};
+
+template <>
+struct ConfigEnumRange<InterpQuality> {
+    static constexpr auto min = InterpQuality::Fast;
+    static constexpr auto max = InterpQuality::Fancy;
 };
 
 template <>
@@ -245,9 +256,11 @@ struct UserSettings {
         ConfigVar<bool> disableWaterRefraction;
         ConfigVar<bool> enableTextureReplacements;
         ConfigVar<FrameInterpMode> enableFrameInterpolation;
+        ConfigVar<InterpQuality> interpolationQuality;
         ConfigVar<int> internalResolutionScale;
         ConfigVar<int> shadowResolutionMultiplier;
         ConfigVar<Resampler> resampler;
+        ConfigVar<int> maxTextureAnisotropy;
         ConfigVar<bool> enableMapBackground;
         ConfigVar<bool> disableCutscenePillarboxing;
         ConfigVar<LetterboxMode> disableLetterboxing;
@@ -346,6 +359,7 @@ struct UserSettings {
         ConfigVar<bool> checkForModUpdates;
         ConfigVar<int> cardFileType;
         ConfigVar<bool> enableAdvancedSettings;
+        ConfigVar<bool> showProfilerOverlay;
     } backend;
 
     // Arrays of size 4 for 4 ports
@@ -364,6 +378,28 @@ UserSettings& getSettings();
 void registerSettings();
 
 void applyInternalResolutionScale(int scale);
+
+inline constexpr int kLockedResolutionHeights[] = {540, 720, 900, 1080, 1440, 2160};
+inline constexpr int kInternalResolutionLockedFirst = 13;
+inline constexpr int kInternalResolutionMax = 18;
+inline int lockedResolutionHeightForValue(int value) {
+    const int index = value - kInternalResolutionLockedFirst;
+    if (index < 0 || index > kInternalResolutionMax - kInternalResolutionLockedFirst) {
+        return 0;
+    }
+    return kLockedResolutionHeights[index];
+}
+inline int lockedResolutionValueForHeight(int height) {
+    for (int i = 0; i <= kInternalResolutionMax - kInternalResolutionLockedFirst; ++i) {
+        if (kLockedResolutionHeights[i] == height) {
+            return kInternalResolutionLockedFirst + i;
+        }
+    }
+    return 0;
+}
+#ifdef __SWITCH__
+void pollDockedModeResolution();
+#endif
 void applyResampler(Resampler resampler);
 
 inline bool isLetterboxingDisabled(bool inCutscene) {
