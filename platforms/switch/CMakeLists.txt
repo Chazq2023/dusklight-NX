@@ -290,6 +290,7 @@ set(_switch_romfs_dir "${CMAKE_CURRENT_BINARY_DIR}/romfs")
 file(COPY "${CMAKE_SOURCE_DIR}/res" DESTINATION "${_switch_romfs_dir}")
 
 switch_add_nro(dusklight
+  OUTPUT_NAME "dusk"
   TITLE "Dusklight"
   AUTHOR "Twilit Realm and Souldbminer"
   VERSION "${BOREALIS_APP_VERSION}"
