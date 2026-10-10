@@ -1633,6 +1633,14 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
                 .key = "Show Shader Compilation",
                 .helpText = "Show an overlay when shaders are being compiled for your hardware.",
             });
+        config_bool_select(leftPane, rightPane, getSettings().backend.waitForShaders,
+            {
+                .key = "Wait for Shaders",
+                .helpText = "Wait for shaders to finish compiling before drawing.<br/><br/>"
+                            "When enabled, new areas appear fully drawn but may briefly hitch the first "
+                            "time new shaders are needed. When disabled, objects pop in as their shaders "
+                            "finish compiling.",
+            });
         config_bool_select(leftPane, rightPane, getSettings().backend.checkForUpdates,
             {
                 .key = "Check for Dusklight Updates",

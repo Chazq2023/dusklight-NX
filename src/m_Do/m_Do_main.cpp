@@ -81,6 +81,7 @@
 #include "SSystem/SComponent/c_API_graphic.h"
 
 #include <aurora/aurora.h>
+#include <aurora/gfx.h>
 #include <aurora/dvd.h>
 #include <aurora/event.h>
 #include <borealis/aurora_log.h>
@@ -845,6 +846,7 @@ int game_main(int argc, char* argv[]) {
     }
     dusk::applyInternalResolutionScale(dusk::getSettings().game.internalResolutionScale.getValue());
     dusk::applyResampler(dusk::getSettings().game.resampler.getValue());
+    aurora_set_wait_for_pipelines(dusk::getSettings().backend.waitForShaders);
 
     dusk::audio::SetMasterVolume(dusk::audio::MasterVolumeToLinear(dusk::getSettings().audio.masterVolume / 100.0f));
     dusk::audio::SetEnableReverb(dusk::getSettings().audio.enableReverb);

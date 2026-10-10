@@ -288,6 +288,11 @@ endif()
 
 set(_switch_romfs_dir "${CMAKE_CURRENT_BINARY_DIR}/romfs")
 file(COPY "${CMAKE_SOURCE_DIR}/res" DESTINATION "${_switch_romfs_dir}")
+# Known-pipeline seed from the official Dusklight release; aurora warms these up at
+# boot (read from romfs:/initial_pipeline_cache.db) so fewer shaders compile in-game.
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/initial_pipeline_cache.db")
+  file(COPY "${CMAKE_CURRENT_LIST_DIR}/initial_pipeline_cache.db" DESTINATION "${_switch_romfs_dir}")
+endif()
 
 switch_add_nro(dusklight
   OUTPUT_NAME "dusk"

@@ -354,6 +354,7 @@ struct UserSettings {
         ConfigVar<std::string> graphicsBackend;
         ConfigVar<bool> skipPreLaunchUI;
         ConfigVar<bool> showPipelineCompilation;
+        ConfigVar<bool> waitForShaders;
         ConfigVar<bool> wasPresetChosen;
         ConfigVar<bool> checkForUpdates;
         ConfigVar<bool> checkForModUpdates;

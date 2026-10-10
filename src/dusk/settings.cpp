@@ -6,6 +6,7 @@
 #include "dusk/ui/ui.hpp"
 
 #include <aurora/aurora.h>
+#include <aurora/gfx.h>
 #include <aurora/saltynx.h>
 #include <dolphin/vi.h>
 #ifdef __SWITCH__
@@ -190,6 +191,7 @@ UserSettings g_userSettings = {
         .graphicsBackend {"backend.graphicsBackend", "auto"},
         .skipPreLaunchUI {"backend.skipPreLaunchUI", false},
         .showPipelineCompilation {"backend.showPipelineCompilation", true},
+        .waitForShaders {"backend.waitForShaders", true},
         .wasPresetChosen {"backend.wasPresetChosen", false},
         .checkForUpdates {"backend.checkForUpdates", true},
         .checkForModUpdates {"backend.checkForModUpdates", true},
@@ -457,6 +459,8 @@ void registerSettings() {
     Register(g_userSettings.backend.graphicsBackend);
     Register(g_userSettings.backend.skipPreLaunchUI);
     Register(g_userSettings.backend.showPipelineCompilation);
+    Register(g_userSettings.backend.waitForShaders,
+        [](const bool& value, const bool&) { aurora_set_wait_for_pipelines(value); });
     Register(g_userSettings.backend.wasPresetChosen);
     Register(g_userSettings.backend.checkForUpdates);
     Register(g_userSettings.backend.checkForModUpdates);
