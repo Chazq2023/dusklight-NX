@@ -914,9 +914,10 @@ void apply_instancing(std::string& src) {
 }
 } // namespace
 
-std::string build_shader_source(const ShaderConfig& config, uint32_t normalAttachment) noexcept {
+std::string build_shader_source(const ShaderConfig& config, DstAlphaMode dstAlphaMode,
+                                uint32_t normalAttachment) noexcept {
   ZoneScoped;
-  const auto hash = xxh3_hash(normalAttachment, xxh3_hash(config));
+  const auto hash = xxh3_hash(dstAlphaMode, xxh3_hash(normalAttachment, xxh3_hash(config)));
   const auto info = build_shader_info(config);
   if (EnableDebugPrints && !s_seenShaders.contains(hash)) {
     s_seenShaders.insert(hash);
@@ -1677,6 +1678,11 @@ std::string build_shader_source(const ShaderConfig& config, uint32_t normalAttac
     fragmentFn += "\n    prev = vec4f(in.nrm, prev.a);";
   }
 
+  if (dstAlphaMode == DstAlphaMode::Replace) {
+    // GX destination alpha is set via the blend constant
+    fragmentFn += "\n    prev.a = 1.0;";
+  }
+
   std::string fragmentOutput;
   std::string_view fragmentOutputType = "@location(0) vec4f"sv;
   std::string fragmentReturn = "\n    return prev;"s;
@@ -1700,7 +1706,18 @@ std::string build_shader_source(const ShaderConfig& config, uint32_t normalAttac
     fragmentReturn += "\n    return out;";
   }
 
-  auto shaderSource = fmt::format(R"""(
+  if (dstAlphaMode == DstAlphaMode::DualSource) {
+    fragmentOutput =
+        "\nstruct FragmentOutput {\n"
+        "    @location(0) @blend_src(0) color: vec4f,\n"
+        "    @location(0) @blend_src(1) blend: vec4f,\n"
+        "};\n";
+    fragmentOutputType = "FragmentOutput"sv;
+    fragmentReturn = "\n    return FragmentOutput(vec4f(prev.rgb, 1.0), prev);";
+  }
+
+  auto shaderSource =
+      fmt::format(R"""(
 fn bswap32(v: u32, le: bool) -> u32 {{
   if (le) {{
     return v;
@@ -2073,6 +2090,9 @@ fn fs_main(in: VertexOutput) -> {10} {{{6}{5}{11}
   if (config.instanced) {
     apply_instancing(shaderSource);
   }
+  if (dstAlphaMode == DstAlphaMode::DualSource) {
+    shaderSource.insert(0, "enable dual_source_blending;\n");
+  }
   if (EnableDebugPrints) {
     Log.info("Generated shader (hash {:x}): {}", hash, shaderSource);
   }
@@ -2080,7 +2100,8 @@ fn fs_main(in: VertexOutput) -> {10} {{{6}{5}{11}
   return shaderSource;
 }
 
-wgpu::ShaderModule build_shader(const ShaderConfig& config, const gfx::RenderTargetLayout& layout) noexcept {
+wgpu::ShaderModule build_shader(const ShaderConfig& config, const gfx::RenderTargetLayout& layout,
+                                DstAlphaMode dstAlphaMode) noexcept {
   ZoneScoped;
   uint32_t normalAttachment = UINT32_MAX;
   for (uint32_t i = 0; i < layout.colorAttachmentCount; ++i) {
@@ -2088,8 +2109,8 @@ wgpu::ShaderModule build_shader(const ShaderConfig& config, const gfx::RenderTar
       normalAttachment = i;
     }
   }
-  const auto shaderSource = build_shader_source(config, normalAttachment);
-  const auto hash = xxh3_hash(normalAttachment, xxh3_hash(config));
+  const auto shaderSource = build_shader_source(config, dstAlphaMode, normalAttachment);
+  const auto hash = xxh3_hash(dstAlphaMode, xxh3_hash(normalAttachment, xxh3_hash(config)));
   wgpu::ShaderSourceWGSL wgslDescriptor{};
   wgslDescriptor.code = shaderSource.c_str();
   const auto label = fmt::format("GX Shader {:x}", hash);

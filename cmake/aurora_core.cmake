@@ -27,6 +27,12 @@ if (AURORA_ENABLE_GX AND AURORA_CACHE_USE_ZSTD)
     target_link_libraries(aurora_core PRIVATE zstd::libzstd)
 endif ()
 
+if (CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    target_compile_options(aurora_core PUBLIC
+            /Zc:__cplusplus # Enable updated `__cplusplus` macro
+    )
+endif ()
+
 if (CMAKE_SYSTEM_NAME STREQUAL Windows)
     # stuff for fetching system info.
     target_link_libraries(aurora_core PRIVATE wbemuuid.lib comsuppw.lib ntdll.lib DXGI.lib)
@@ -46,7 +52,7 @@ if (AURORA_ENABLE_GX)
     target_link_libraries(aurora_core PUBLIC imgui)
 endif ()
 
-if(AURORA_ENABLE_RMLUI)
+if (AURORA_ENABLE_RMLUI)
     target_compile_definitions(aurora_core PUBLIC AURORA_ENABLE_RMLUI)
 
     target_sources(aurora_core PRIVATE

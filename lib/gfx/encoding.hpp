@@ -5,6 +5,7 @@
 namespace aurora::gfx {
 
 bool bind_pipeline(PipelineRef ref, const wgpu::RenderPassEncoder& pass);
+void bind_pipeline(const wgpu::RenderPipeline& pipeline, const wgpu::RenderPassEncoder& pass);
 
 // Skips redundant per-draw binds when the state matches the previous draw on
 // the current pass encoder. Reset at each new pass and after out-of-band
