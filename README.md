@@ -14,31 +14,36 @@ Dusklight is a reverse-engineered reimplementation of Twilight Princess.
 
 It aims to be as accurate as possible to the original while also providing new options, enhancements, and tools to customize your experience.
 
+> [!IMPORTANT]
+> Dusklight's official website is https://twilitrealm.dev/, any other website is not affiliated and may be promoting AI-generated misinformation.
+
 # Setup
 
 > [!IMPORTANT]
 > Dusklight does *not* provide any copyrighted assets. You must provide your own copy of the original game.
 
 > [!IMPORTANT]
-> At a minimum, Dusklight requires a GPU with support for either D3D12, Vulkan, or Metal on supported platforms. On Nintendo Switch, performance and compatibility may vary depending on hardware and system version.
+> At a minimum, Dusklight requires a GPU with support for D3D12, Vulkan 1.1+, or Metal on supported platforms. For older devices, best-effort support is provided for D3D11 and OpenGL ES (Android). On Nintendo Switch, performance and compatibility may vary depending on hardware and system version.
 
-### 1. Verify your dump
+### 1. Dump your game
 
-First, make sure your dump of the game is clean and supported by Dusklight. You can do this by checking the SHA-1 hash of your dump against this list of supported versions:
+You must dump your own copy of the game. Please see [this article](https://wiki.dolphin-emu.org/index.php?title=Ripping_Games) for instructions. After dumping, you can use a program like [Dolphin](https://dolphin-emu.org/) or [nodtool](https://github.com/encounter/nod/releases) to convert the `.iso` to `.rvz` to save space.
 
-| Version      | SHA-1 hash                                 |
-|--------------| ------------------------------------------ |
-| GameCube USA | `75edd3ddff41f125d1b4ce1a40378f1b565519e7` |
-| GameCube EUR | `2601822a488eeb86fb89db16ca8f29c2c953e1ca` |
+Dusklight currently supports all commercial discs except for Wii's Korean release.
 
-*Support for other versions of the game is planned in the future.
+> [!NOTE]
+> Dusklight is based on the [Twilight Princess decompilation](https://github.com/zeldaret/tp), which is currently only matching for GameCube. As a result, even when playing Dusklight with a Wii disc, you will be presented with the GameCube version's HUD and certain other specificities.
 
-### 2. Download Dusklight
+### 2. Install Dusklight (PC / mobile)
+
+Visit the [official installation guide](https://twilitrealm.dev/install/) for full instructions.
+
+### 3. Download Dusklight (Nintendo Switch)
 
 Download the latest release from the [releases page](https://github.com/givethesourceplox/dusklight-nx/releases).  
 For Nintendo Switch, download the provided `.nro` file.
 
-### 3. Setup on Nintendo Switch
+### 4. Setup on Nintendo Switch
 
 - Copy the `.nro` file to your Switch `switch/` folder on the SD card
 - Launch via your preferred homebrew loader

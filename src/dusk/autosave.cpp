@@ -1,6 +1,12 @@
 #include "dusk/autosave.h"
+
 #include "dusk/ui/ui.hpp"
 #include "imgui/ImGuiConsole.hpp"
+#include "mods/svc/save.hpp"
+
+#include "d/actor/d_a_alink.h"
+#include "m_Do/m_Do_MemCard.h"
+#include "m_Do/m_Do_MemCardRWmng.h"
 
 bool shouldAutoSave = false;
 u8 mSaveBuffer[QUEST_LOG_SIZE * 3];
@@ -14,9 +20,23 @@ static AutoSaveFuncs AutoSaveFuncsProc[] = {
 
 void noAutoSave() {}
 
+bool canAutoSave() {
+    daAlink_c* player = (daAlink_c*)daAlink_getAlinkActorClass();
+    if (player == nullptr) {
+        return false;
+    }
+
+    if (player->checkCargoCarry() || player->checkCanoeRide()) {
+        return false;
+    }
+
+    return dusk::getSettings().game.autoSave && shouldAutoSave && mAutoSaveProc == 0 &&
+           strcmp(dComIfGp_getStartStageName(), "F_SP102") != 0 &&
+           strcmp(dComIfGp_getStartStageName(), "F_SP112") != 0;
+}
+
 void triggerAutoSave() {
-    if (dusk::getSettings().game.autoSave && shouldAutoSave && mAutoSaveProc == 0 &&
-        strcmp(dComIfGp_getStartStageName(), "F_SP102") != 0)
+    if (canAutoSave())
     {
         mAutoSaveProc = 1;
     }
@@ -26,8 +46,12 @@ void updateAutoSave() {
     (AutoSaveFuncsProc[mAutoSaveProc])();
 }
 
-void writeAutoSave() {
-    int stageNo = dStage_stagInfo_GetSaveTbl(dComIfGp_getStageStagInfo());
+bool writeAutoSave() {
+    stage_stag_info_class* stagInfo = dComIfGp_getStageStagInfo();
+    if (stagInfo == nullptr) {
+        return false;
+    }
+    int stageNo = dStage_stagInfo_GetSaveTbl(stagInfo);
 
     dComIfGs_putSave(stageNo);
     dComIfGs_setMemoryToCard(mSaveBuffer, dComIfGs_getDataNum());
@@ -40,6 +64,7 @@ void writeAutoSave() {
     }
 
     g_mDoMemCd_control.save(mSaveBuffer, sizeof(mSaveBuffer), 0);
+    return true;
 }
 
 void autoSaving() {
@@ -48,8 +73,9 @@ void autoSaving() {
         if (cardState == 2) {
             mAutoSaveProc = 1;
         } else if (cardState == 1) {
-            writeAutoSave();
-            mAutoSaveProc = 3;
+            if (writeAutoSave()) {
+                mAutoSaveProc = 3;
+            }
         }
     }
 }
@@ -85,6 +111,9 @@ void waitingForWrite() {
 }
 
 void endAutoSave() {
+    const int slot = dComIfGs_getDataNum();
+    dusk::mods::svc::save_slot_written(slot);
+
     dusk::ui::push_toast({
         .type = "autosave",
         .duration = std::chrono::milliseconds(1500),

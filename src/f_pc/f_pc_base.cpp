@@ -41,7 +41,7 @@ BOOL fpcBs_Is_JustOfType(int i_typeA, int i_typeB) {
     }
 }
 
-int g_fpcBs_type;
+DUSK_GAME_DATA int g_fpcBs_type;
 
 int fpcBs_MakeOfType(int* i_type) {
     static int t_type = 0x9130000;
@@ -136,8 +136,17 @@ base_process_class* fpcBs_Create(s16 i_profname, fpc_ProcID i_procID, void* i_ap
     u32 size;
 
     pprofile = (process_profile_definition*)fpcPf_Get(i_profname);
+    if (pprofile == NULL) {
+#if TARGET_PC
+        DuskLog.debug("fpcBs_Create: profile not found for profname={}", i_profname);
+#endif
+        return NULL;
+    }
+#if TARGET_PC
+    const char* procName = getProcName(i_profname);
     DuskLog.debug("fpcBs_Create: pid={} profname={} ({}) profile={} procSize={} unkSize={}",
-           i_procID, getProcName(i_profname), i_profname, (void*)pprofile, pprofile->process_size, pprofile->unk_size);
+           i_procID, procName ? procName : "(unknown)", i_profname, (void*)pprofile, pprofile->process_size, pprofile->unk_size);
+#endif
     size = pprofile->process_size + pprofile->unk_size;
 
     pprocess = (base_process_class*)cMl::memalignB(-4, size);
