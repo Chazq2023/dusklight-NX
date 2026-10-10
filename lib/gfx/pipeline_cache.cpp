@@ -1,5 +1,7 @@
 #include "pipeline_cache.hpp"
 
+#include <aurora/gfx.h>
+
 #include "clear.hpp"
 #include "frame_packet.hpp"
 #include "resources.hpp"
@@ -100,6 +102,8 @@ static void* pipeline_worker_trampoline(void*) {
 static std::thread g_pipelineThread;
 #endif
 static std::atomic_bool g_pipelineThreadEnd = false;
+// When set, scene draws wait for their pipeline instead of being skipped until it compiles.
+static std::atomic_bool g_waitForPipelines = false;
 static std::condition_variable g_pipelineQueueCv;
 static std::condition_variable g_pipelineReadyCv;
 static absl::flat_hash_map<PipelineRef, CompiledPipeline> g_pipelines;
@@ -414,6 +418,15 @@ static void promote_pending_pipeline(PipelineRef hash, PipelinePriority priority
 
   auto backgroundIt = find_pending_pipeline(g_backgroundPipelineQueue, hash);
   if (backgroundIt == g_backgroundPipelineQueue.end()) {
+    if (priority == PipelinePriority::Blocking) {
+      // Already queued at normal priority: jump ahead of the other pending pipelines.
+      auto priorityIt = find_pending_pipeline(g_pipelineQueue, hash);
+      if (priorityIt != g_pipelineQueue.end() && priorityIt != g_pipelineQueue.begin()) {
+        PendingPipeline pending = std::move(*priorityIt);
+        g_pipelineQueue.erase(priorityIt);
+        g_pipelineQueue.emplace_front(std::move(pending));
+      }
+    }
     return;
   }
   if (priority == PipelinePriority::Blocking) {
@@ -1124,14 +1137,18 @@ static void stop_pipeline_cache_writer() {
   g_pipelineCacheWriteQueue.clear();
 }
 
+static PipelinePriority scene_pipeline_priority() {
+  return g_waitForPipelines.load(std::memory_order_relaxed) ? PipelinePriority::Blocking : PipelinePriority::Normal;
+}
+
 PipelineRef find_pipeline(const clear::PipelineConfig& config, const RenderTargetLayout& layout) {
   remember_pipeline_config(ShaderType::Clear, config, current_frame(), true);
-  return resolve_pipeline(ShaderType::Clear, config, layout, PipelinePriority::Normal);
+  return resolve_pipeline(ShaderType::Clear, config, layout, scene_pipeline_priority());
 }
 
 PipelineRef find_pipeline(const gx::PipelineConfig& config, const RenderTargetLayout& layout) {
   remember_pipeline_config(ShaderType::GX, config, current_frame(), true);
-  return resolve_pipeline(ShaderType::GX, config, layout, PipelinePriority::Normal);
+  return resolve_pipeline(ShaderType::GX, config, layout, scene_pipeline_priority());
 }
 
 #ifdef AURORA_ENABLE_RMLUI
@@ -1269,3 +1286,7 @@ bool get_pipeline(PipelineRef ref, CompiledPipeline& pipeline) {
 }
 
 } // namespace aurora::gfx
+
+void aurora_set_wait_for_pipelines(const bool enabled) {
+  aurora::gfx::g_waitForPipelines.store(enabled, std::memory_order_relaxed);
+}

@@ -39,6 +39,9 @@ const AuroraStats* aurora_get_stats();
 float aurora_get_fps();
 
 void aurora_enable_vsync(bool enabled);
+// Wait for scene pipelines to compile instead of skipping their draws until ready.
+// Trades pop-in for a brief hitch when new pipelines are first needed.
+void aurora_set_wait_for_pipelines(bool enabled);
 
 #ifdef __cplusplus
 }
