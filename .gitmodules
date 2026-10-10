@@ -1,7 +1,7 @@
 [submodule "extern/aurora"]
 	path = extern/aurora
-	url = https://github.com/souldbminerr/aurora-switch.git
-	branch = switch
+	url = https://github.com/Chazq2023/dusklight-NX.git
+	branch = aurora-switch
 [submodule "extern/borealis"]
 	path = extern/borealis
 	url = https://github.com/encounter/borealis.git
